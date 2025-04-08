@@ -10,6 +10,7 @@ import io
 import datetime
 import base64
 import time
+import os
 
 # Load YOLO (we chose v8) model
 model_path = r'C:\Users\thebl\Desktop\‎\folder1\Face recoginition(robo,YOLO)\best.pt'  # Change this if needed
@@ -21,9 +22,8 @@ st.title("Object Detection with YOLO (Classroom Attendance Tracker)")
 # Create a sidebar with options
 option = st.sidebar.radio("Choose an option", ["Upload Image", "Live Camera", "Dashboard"])
 
-# Initialize attendance data
-attendance_data = pd.DataFrame(columns=["Date", "Time", "Attendance Count"])
-
+# Define the CSV file path
+csv_file_path = r"C:\Users\thebl\Desktop\‎\folder1\Face recoginition(robo,YOLO)\attendance.xlsx"
 # Function to detect people in an image or frame
 def detect_people(frame):
     """
@@ -52,6 +52,32 @@ def detect_people(frame):
 
     return frame, num_students
 
+# Function to update attendance data in CSV
+def update_attendance_csv(num_students):
+    # Check if CSV file exists
+    if not os.path.exists(csv_file_path):
+        # Create a new CSV file with headers
+        df = pd.DataFrame(columns=["Date", "Attendance Count"])
+        df.to_csv(csv_file_path, index=False)
+
+    # Read existing data
+    df = pd.read_csv(csv_file_path)
+
+    # Get today's date
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    # Check if today's date already exists in the CSV
+    if not df.empty and df.iloc[-1]["Date"] == today:
+        # Update the existing row
+        df.loc[df.index[-1], "Attendance Count"] += num_students
+    else:
+        # Add a new row
+        new_row = {"Date": today, "Attendance Count": num_students}
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+    # Save the updated data back to CSV
+    df.to_csv(csv_file_path, index=False)
+
 # Option to upload an image
 if option == "Upload Image":
     st.subheader("Upload an image for attendance detection")
@@ -65,9 +91,8 @@ if option == "Upload Image":
         image_np = np.array(image)
         processed_image, count = detect_people(image_np)
 
-        # Record attendance data
-        current_time = datetime.datetime.now()
-        attendance_data.loc[len(attendance_data)] = [current_time.date(), current_time.time(), count]
+        # Update attendance data in CSV
+        update_attendance_csv(count)
 
         # Show results
         st.image(processed_image, caption=f"Detected attendance: {count}", use_container_width=True)
@@ -112,9 +137,8 @@ elif option == "Live Camera":
                     countdown_text.write(f"### Countdown: {5 - countdown + 1} seconds")
                     time.sleep(1)  # Wait for 1 second
                 else:
-                    # Save attendance data
-                    current_time = datetime.datetime.now()
-                    attendance_data.loc[len(attendance_data)] = [current_time.date(), current_time.time(), num_students]
+                    # Update attendance data in CSV
+                    update_attendance_csv(num_students)
                     st.success(f"Attendance saved: {num_students} students detected")
                     countdown = 0  # Reset countdown
             else:
@@ -131,6 +155,12 @@ elif option == "Live Camera":
 elif option == "Dashboard":
     st.subheader("Attendance Dashboard")
 
+    # Read attendance data from CSV
+    if os.path.exists(csv_file_path):
+        attendance_data = pd.read_csv(csv_file_path)
+    else:
+        attendance_data = pd.DataFrame(columns=["Date", "Attendance Count"])
+
     # Check if attendance data is available
     if attendance_data.empty:
         st.warning("No attendance data available. Please perform attendance detection first.")
@@ -146,28 +176,20 @@ elif option == "Dashboard":
 
         # Show bar graph of attendance
         st.write("### Daily Attendance Summary")
-        daily_summary = attendance_data.groupby("Date")["Attendance Count"].mean().reset_index()
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(x="Date", y="Attendance Count", data=daily_summary, ax=ax)
+        sns.barplot(x="Date", y="Attendance Count", data=attendance_data, ax=ax)
         ax.set_title("Daily Attendance Summary")
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         st.pyplot(fig)
 
-        # Show heatmap of attendance
-        st.write("### Attendance Heatmap")
-        # Convert time to hour for heatmap
-        attendance_data['Hour'] = pd.to_datetime(attendance_data['Time']).dt.hour
-        heatmap_data = attendance_data.pivot_table(index='Hour', columns='Date', values='Attendance Count', aggfunc='mean')
-        fig, ax = plt.subplots(figsize=(10, 8))
-        sns.heatmap(heatmap_data, annot=True, cmap="YlGnBu", ax=ax)
-        ax.set_title("Attendance Heatmap")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Hour of Day")
-        st.pyplot(fig)
-
         # Export attendance data as CSV
         st.write("### Export Attendance Data")
-        csv = attendance_data.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="attendance_data.csv">Download CSV File</a>'
-        st.markdown(href, unsafe_allow_html=True)
+        with open(csv_file_path, "rb") as file:
+            btn = st.download_button(
+                label="Download CSV File",
+                data=file,
+                file_name="attendance_data.csv",
+                mime="text/csv"
+            )
+# Run the Streamlit app
+# streamlit run 'C:\Users\thebl\Desktop\folder1\Face recognition(robo,YOLO)\main.py'
