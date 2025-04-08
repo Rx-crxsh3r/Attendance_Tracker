@@ -13,7 +13,7 @@ import time
 import os
 
 # Load YOLO (we chose v8) model
-model_path = r'C:\Users\thebl\Desktop\‎\folder1\Face recoginition(robo,YOLO)\best.pt'  # Change this if needed
+model_path = 'best.pt'  # Change this if needed
 model = YOLO(model_path)
 
 # Set the title of the Streamlit app
@@ -23,7 +23,8 @@ st.title("Object Detection with YOLO (Classroom Attendance Tracker)")
 option = st.sidebar.radio("Choose an option", ["Upload Image", "Live Camera", "Dashboard"])
 
 # Define the CSV file path
-csv_file_path = r"C:\Users\thebl\Desktop\‎\folder1\Face recoginition(robo,YOLO)\attendance.xlsx"
+csv_file_path = r"attendance.xlsx"
+
 # Function to detect people in an image or frame
 def detect_people(frame):
     """
@@ -54,26 +55,23 @@ def detect_people(frame):
 
 # Function to update attendance data in CSV
 def update_attendance_csv(num_students):
+    # Get current date and time
+    now = datetime.datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+
     # Check if CSV file exists
     if not os.path.exists(csv_file_path):
         # Create a new CSV file with headers
-        df = pd.DataFrame(columns=["Date", "Attendance Count"])
+        df = pd.DataFrame(columns=["Date", "Time", "Attendance Count"])
         df.to_csv(csv_file_path, index=False)
 
     # Read existing data
     df = pd.read_csv(csv_file_path)
 
-    # Get today's date
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-
-    # Check if today's date already exists in the CSV
-    if not df.empty and df.iloc[-1]["Date"] == today:
-        # Update the existing row
-        df.loc[df.index[-1], "Attendance Count"] += num_students
-    else:
-        # Add a new row
-        new_row = {"Date": today, "Attendance Count": num_students}
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    # Add a new row
+    new_row = {"Date": date_str, "Time": time_str, "Attendance Count": num_students}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
     # Save the updated data back to CSV
     df.to_csv(csv_file_path, index=False)
@@ -159,27 +157,29 @@ elif option == "Dashboard":
     if os.path.exists(csv_file_path):
         attendance_data = pd.read_csv(csv_file_path)
     else:
-        attendance_data = pd.DataFrame(columns=["Date", "Attendance Count"])
+        attendance_data = pd.DataFrame(columns=["Date", "Time", "Attendance Count"])
 
     # Check if attendance data is available
     if attendance_data.empty:
         st.warning("No attendance data available. Please perform attendance detection first.")
     else:
-        # Show attendance trends over time
-        st.write("### Attendance Trends Over Time")
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.lineplot(x=attendance_data.index, y="Attendance Count", data=attendance_data, ax=ax)
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Attendance Count")
-        ax.set_title("Attendance Trends")
-        st.pyplot(fig)
 
-        # Show bar graph of attendance
+        # Show daily attendance summary
         st.write("### Daily Attendance Summary")
+        daily_summary = attendance_data.groupby("Date")["Attendance Count"].sum().reset_index()
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(x="Date", y="Attendance Count", data=attendance_data, ax=ax)
+        sns.barplot(x="Date", y="Attendance Count", data=daily_summary, ax=ax)
         ax.set_title("Daily Attendance Summary")
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
+        st.pyplot(fig)
+
+        # Show hourly attendance summary
+        st.write("### Hourly Attendance Summary")
+        attendance_data["Hour"] = pd.to_datetime(attendance_data["Time"]).dt.hour
+        hourly_summary = attendance_data.groupby("Hour")["Attendance Count"].sum().reset_index()
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(x="Hour", y="Attendance Count", data=hourly_summary, ax=ax)
+        ax.set_title("Hourly Attendance Summary")
         st.pyplot(fig)
 
         # Export attendance data as CSV
@@ -191,5 +191,3 @@ elif option == "Dashboard":
                 file_name="attendance_data.csv",
                 mime="text/csv"
             )
-# Run the Streamlit app
-# streamlit run 'C:\Users\thebl\Desktop\folder1\Face recognition(robo,YOLO)\main.py'
